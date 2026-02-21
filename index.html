@@ -96,10 +96,11 @@
         const db = getFirestore(app);
 
         // --- IMAGEKIT INIT ---
+        // Note: Removed authenticationEndpoint to prevent automatic (and failing) internal fetch.
+        // We will pass auth parameters manually in uploadToImageKit().
         const imagekit = new ImageKit({
             publicKey: CONFIG.imagekitPublicKey,
-            urlEndpoint: CONFIG.imagekitUrlEndpoint,
-            authenticationEndpoint: "/api/imagekit-auth" // Calls Vercel API
+            urlEndpoint: CONFIG.imagekitUrlEndpoint
         });
 
         // --- DOM ELEMENTS ---
@@ -295,35 +296,72 @@
                 applyBranding();
                 showToast("Settings saved!", "success");
             } catch (error) {
+                console.error("Save settings error:", error);
                 showToast("Save failed: " + error.message, "error");
             } finally {
                 setLoading(false, "save-settings-btn");
             }
         }
 
-      async function uploadToImageKit(file) {
-  // Convert File -> base64
-  const base64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+        /**
+         * UPDATED: Manual Auth + Upload Flow
+         * 1. Fetches auth parameters from API
+         * 2. Converts file to Base64
+         * 3. Uploads with explicit signature/token
+         */
+        async function uploadToImageKit(file) {
+            try {
+                // Step 1: Manual Auth Fetch
+                const authUrl = `${window.location.origin}/api/imagekit-auth`;
+                console.log("Fetching ImageKit auth from:", authUrl);
+                
+                const authRes = await fetch(authUrl);
+                if (!authRes.ok) {
+                    throw new Error(`Auth fetch failed: ${authRes.statusText}`);
+                }
+                
+                const authData = await authRes.json();
+                console.log("Auth received:", authData);
 
-  return new Promise((resolve, reject) => {
-    imagekit.upload(
-      {
-        file: base64, // base64 string
-        fileName: "site_asset_" + Date.now(),
-        tags: ["site-assets"]
-      },
-      (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
-      }
-    );
-  });
-}
+                if (!authData.token || !authData.signature || !authData.expire) {
+                    throw new Error("Invalid auth response structure from server.");
+                }
+
+                // Step 2: Convert File to Base64
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (e) => reject(new Error("File read error"));
+                    reader.readAsDataURL(file);
+                });
+
+                // Step 3: Upload with Explicit Parameters
+                return new Promise((resolve, reject) => {
+                    imagekit.upload(
+                        {
+                            file: base64, // Base64 string
+                            fileName: file.name || "upload_" + Date.now(),
+                            token: authData.token,
+                            signature: authData.signature,
+                            expire: authData.expire,
+                            tags: ["site-assets"]
+                        },
+                        (err, result) => {
+                            if (err) {
+                                console.error("ImageKit SDK Upload Error:", err);
+                                reject(new Error(err.message || "Upload failed"));
+                            } else {
+                                console.log("Upload Success:", result);
+                                resolve(result);
+                            }
+                        }
+                    );
+                });
+            } catch (err) {
+                console.error("uploadToImageKit Wrapper Error:", err);
+                throw err;
+            }
+        }
 
         function exportCSV() {
             const headers = ["ID", "Email", "Amount Range", "Created At", "IP"];
