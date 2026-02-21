@@ -3,633 +3,645 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real Life Bible Help</title>
+    <title>Presale Registration</title>
     
-    <!-- Libraries -->
+    <!-- 1. Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/imagekit-javascript/dist/imagekit.min.js"></script>
-
-    <!-- Tailwind Config for Dark Mode & Fonts -->
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        serif: ['Merriweather', 'serif'],
-                    },
                     colors: {
-                        brand: { 50: '#f0fdfa', 500: '#14b8a6', 700: '#0f766e', 900: '#134e4a' }
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9', // Default accent, will be overridden by JS
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.5s ease-out'
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } }
                     }
                 }
             }
         }
     </script>
 
-    <!-- 3D & Utility Styles -->
+    <!-- 2. ImageKit SDK -->
+    <script type="text/javascript" src="https://unpkg.com/imagekit-javascript/dist/imagekit.min.js"></script>
+
+    <!-- 3. Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
-        .card-3d {
-            transition: all 0.3s ease;
-            transform-style: preserve-3d;
-        }
-        .card-3d:hover {
-            transform: translateY(-5px) rotateX(2deg);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-        .hide { display: none !important; }
-        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        /* Custom Loader */
+        .loader { border: 3px solid rgba(255,255,255,0.1); border-radius: 50%; border-top: 3px solid currentColor; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        /* Simple Rich Text Editor */
-        .editor-preview h1 { font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; }
-        .editor-preview h2 { font-size: 1.25rem; font-weight: bold; margin-bottom: 0.5rem; }
-        .editor-preview ul { list-style-type: disc; margin-left: 1.5rem; }
-        .editor-preview p { margin-bottom: 0.75rem; }
+        /* Glassmorphism */
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-dark { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300">
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-white transition-colors duration-300 min-h-screen flex flex-col font-sans">
 
-    <!-- Navbar -->
-    <nav class="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b dark:border-gray-800">
-        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-            <a href="#home" class="text-xl font-bold tracking-tight text-brand-700 dark:text-brand-500">
-                <i class="fas fa-bible mr-2"></i>Real Life Bible Help
-            </a>
-            <div class="flex items-center space-x-4">
-                <button id="themeToggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
-                    <i class="fas fa-moon dark:hidden"></i>
-                    <i class="fas fa-sun hidden dark:inline text-yellow-400"></i>
-                </button>
-                <a href="#bookmarks" class="p-2"><i class="far fa-bookmark"></i></a>
-                <a href="#admin" id="adminLink" class="hidden text-xs font-bold text-red-500 uppercase">Admin</a>
-            </div>
-        </div>
-    </nav>
+    <!-- ================= CONFIGURATION ================= -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, query, where, orderBy, limit, startAfter, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-    <!-- Main Content Area -->
-    <main id="app" class="max-w-6xl mx-auto px-4 py-6 min-h-screen">
-        
-        <!-- === VIEW: HOME === -->
-        <div id="view-home" class="view-section">
-            <!-- Daily Message -->
-            <div id="dailyMessage" class="mb-8 p-6 bg-gradient-to-r from-brand-500 to-brand-700 rounded-2xl text-white shadow-lg card-3d hidden">
-                <h3 class="text-xs uppercase tracking-widest opacity-80 mb-2">Daily Encouragement</h3>
-                <p id="dailyText" class="text-xl font-serif italic"></p>
-            </div>
+        // --- CONFIG: REPLACE VALUES BELOW ---
+        const CONFIG = {
+            adminEmail: "your-admin-email@example.com", // Must match Security Rules
+            imagekitUrlEndpoint: "https://ik.imagekit.io/your_imagekit_id", // From ImageKit Dashboard
+            imagekitPublicKey: "public_...", // From ImageKit Dashboard
+            firebaseConfig: {
+                apiKey: "AIzaSy...",
+                authDomain: "your-project.firebaseapp.com",
+                projectId: "your-project",
+                storageBucket: "your-project.appspot.com",
+                messagingSenderId: "123...",
+                appId: "1:123..."
+            }
+        };
 
-            <!-- Search -->
-            <div class="relative mb-10">
-                <i class="fas fa-search absolute left-4 top-3.5 text-gray-400"></i>
-                <input type="text" id="searchInput" placeholder="What are you struggling with today? (e.g. anxiety, debt...)" 
-                    class="w-full pl-12 pr-4 py-3 rounded-xl border-none ring-1 ring-gray-200 dark:ring-gray-700 bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all">
-            </div>
+        // --- STATE MANAGEMENT ---
+        const state = {
+            user: null,
+            settings: {
+                siteName: "Presale Launch",
+                tagline: "Join the future of finance.",
+                primaryCtaText: "Join Waitlist",
+                logoUrl: "",
+                heroBackgroundUrl: "", // Optional
+                accentColor: "#3b82f6" // Default Blue
+            },
+            submissions: [],
+            lastDoc: null, // For pagination
+            loading: false,
+            filterAmount: 'all',
+            searchQuery: ''
+        };
 
-            <!-- Categories -->
-            <section class="mb-10">
-                <h2 class="text-lg font-bold mb-4">Choose Your Struggle</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="categoryGrid">
-                    <!-- Injected via JS -->
-                </div>
-            </section>
+        // --- FIREBASE INIT ---
+        const app = initializeApp(CONFIG.firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-            <!-- Moods -->
-            <section class="mb-10">
-                <h2 class="text-lg font-bold mb-4">How are you feeling?</h2>
-                <div class="flex flex-wrap gap-3" id="moodGrid">
-                    <!-- Injected via JS -->
-                </div>
-            </section>
+        // --- IMAGEKIT INIT ---
+        const imagekit = new ImageKit({
+            publicKey: CONFIG.imagekitPublicKey,
+            urlEndpoint: CONFIG.imagekitUrlEndpoint,
+            authenticationEndpoint: "/api/imagekit-auth" // Calls Vercel API
+        });
 
-            <!-- Posts Feed -->
-            <section>
-                <h2 class="text-lg font-bold mb-4" id="feedTitle">Latest Help</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="postsGrid">
-                    <!-- Injected via JS -->
-                </div>
-            </section>
-        </div>
+        // --- DOM ELEMENTS ---
+        const els = {
+            app: document.getElementById('app'),
+            toastContainer: document.getElementById('toast-container'),
+            darkModeToggle: document.getElementById('dark-mode-toggle')
+        };
 
-        <!-- === VIEW: SINGLE POST === -->
-        <div id="view-post" class="view-section hide">
-            <button onclick="window.history.back()" class="mb-4 text-sm text-gray-500 hover:text-brand-500"><i class="fas fa-arrow-left mr-1"></i> Back</button>
-            <article class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden">
-                <div id="postImage" class="h-64 w-full bg-cover bg-center bg-gray-200"></div>
-                <div class="p-6 md:p-10">
-                    <div class="flex justify-between items-start">
-                        <span id="postCategory" class="text-xs font-bold uppercase text-brand-500 tracking-wider"></span>
-                        <div class="flex space-x-3">
-                            <button id="btnBookmark" class="text-gray-400 hover:text-brand-500"><i class="far fa-bookmark fa-lg"></i></button>
-                            <button id="btnShare" class="text-gray-400 hover:text-blue-500"><i class="fas fa-share-alt fa-lg"></i></button>
+        // --- INITIALIZATION ---
+        async function init() {
+            // Theme Check
+            if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+
+            // Load Settings
+            await loadSettings();
+            
+            // Auth Listener
+            onAuthStateChanged(auth, (user) => {
+                state.user = user;
+                render();
+            });
+        }
+
+        // --- DATA SERVICE ---
+        async function loadSettings() {
+            try {
+                const docRef = doc(db, "settings", "site");
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    state.settings = { ...state.settings, ...docSnap.data() };
+                    applyBranding();
+                }
+            } catch (e) {
+                console.warn("Settings not found or permission denied (first run). using defaults.");
+            }
+        }
+
+        function applyBranding() {
+            document.title = state.settings.siteName;
+            // Inject custom accent color dynamically
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .bg-accent { background-color: ${state.settings.accentColor} !important; }
+                .text-accent { color: ${state.settings.accentColor} !important; }
+                .border-accent { border-color: ${state.settings.accentColor} !important; }
+                .hover-bg-accent:hover { background-color: ${state.settings.accentColor} !important; filter: brightness(90%); }
+            `;
+            document.head.appendChild(style);
+        }
+
+        async function submitForm(e) {
+            e.preventDefault();
+            const email = document.getElementById('public-email').value;
+            const amount = document.getElementById('public-amount').value;
+
+            if(!email || !amount) return showToast("Please fill all fields", "error");
+
+            setLoading(true, "submit-btn");
+
+            try {
+                // Get IP (simple fetch, optional)
+                let ipData = {}; 
+                try { const res = await fetch('https://api.ipify.org?format=json'); ipData = await res.json(); } catch(e){}
+
+                await addDoc(collection(db, "submissions"), {
+                    email: email,
+                    amountRange: amount,
+                    createdAt: serverTimestamp(),
+                    ip: ipData.ip || 'unknown',
+                    userAgent: navigator.userAgent
+                });
+
+                document.getElementById('public-form').reset();
+                showToast("Successfully registered!", "success");
+            } catch (error) {
+                console.error(error);
+                showToast("Submission failed. Try again.", "error");
+            } finally {
+                setLoading(false, "submit-btn");
+            }
+        }
+
+        // --- ADMIN ACTIONS ---
+        async function loginAdmin(e) {
+            e.preventDefault();
+            const email = document.getElementById('admin-email').value;
+            const pass = document.getElementById('admin-pass').value;
+
+            setLoading(true, "login-btn");
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+                showToast("Welcome back, Admin", "success");
+            } catch (error) {
+                showToast("Login failed: " + error.message, "error");
+            } finally {
+                setLoading(false, "login-btn");
+            }
+        }
+
+        async function logout() {
+            await signOut(auth);
+            window.location.reload();
+        }
+
+        async function fetchSubmissions(reset = true) {
+            if (reset) {
+                state.submissions = [];
+                state.lastDoc = null;
+            }
+
+            setLoading(true, "load-more-btn");
+
+            try {
+                let q = query(
+                    collection(db, "submissions"),
+                    orderBy("createdAt", "desc"),
+                    limit(10)
+                );
+
+                if (state.filterAmount !== 'all') {
+                    q = query(q, where("amountRange", "==", state.filterAmount));
+                }
+
+                if (state.lastDoc) {
+                    q = query(q, startAfter(state.lastDoc));
+                }
+
+                const snapshot = await getDocs(q);
+                state.lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                
+                let newSubs = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+
+                // Client side search (Firestore doesn't support partial text search natively easily)
+                if(state.searchQuery) {
+                    newSubs = newSubs.filter(s => s.email.toLowerCase().includes(state.searchQuery.toLowerCase()));
+                }
+
+                state.submissions = [...state.submissions, ...newSubs];
+                renderAdminDashboard();
+            } catch (error) {
+                showToast("Error loading data: " + error.message, "error");
+            } finally {
+                setLoading(false, "load-more-btn");
+            }
+        }
+
+        async function deleteSubmission(id) {
+            if(!confirm("Are you sure? This cannot be undone.")) return;
+            try {
+                await deleteDoc(doc(db, "submissions", id));
+                state.submissions = state.submissions.filter(s => s.id !== id);
+                renderAdminDashboard();
+                showToast("Deleted", "success");
+            } catch (e) {
+                showToast(e.message, "error");
+            }
+        }
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            setLoading(true, "save-settings-btn");
+            
+            const formData = new FormData(e.target);
+            const updates = {
+                siteName: formData.get('siteName'),
+                tagline: formData.get('tagline'),
+                primaryCtaText: formData.get('primaryCtaText'),
+                accentColor: formData.get('accentColor'),
+                logoUrl: state.settings.logoUrl, // Preserved unless uploaded
+                heroBackgroundUrl: state.settings.heroBackgroundUrl
+            };
+
+            try {
+                // Upload Logo if present
+                const logoFile = document.getElementById('logo-upload').files[0];
+                if(logoFile) {
+                   const res = await uploadToImageKit(logoFile);
+                   updates.logoUrl = res.url;
+                }
+
+                // Upload Hero if present
+                const heroFile = document.getElementById('hero-upload').files[0];
+                if(heroFile) {
+                   const res = await uploadToImageKit(heroFile);
+                   updates.heroBackgroundUrl = res.url;
+                }
+
+                await setDoc(doc(db, "settings", "site"), updates, { merge: true });
+                state.settings = { ...state.settings, ...updates };
+                applyBranding();
+                showToast("Settings saved!", "success");
+            } catch (error) {
+                showToast("Save failed: " + error.message, "error");
+            } finally {
+                setLoading(false, "save-settings-btn");
+            }
+        }
+
+        function uploadToImageKit(file) {
+            return new Promise((resolve, reject) => {
+                imagekit.upload({
+                    file: file,
+                    fileName: "site_asset_" + Date.now(),
+                    tags: ["site-assets"]
+                }, (err, result) => {
+                    if(err) reject(err);
+                    else resolve(result);
+                });
+            });
+        }
+
+        function exportCSV() {
+            const headers = ["ID", "Email", "Amount Range", "Created At", "IP"];
+            const rows = state.submissions.map(s => [
+                s.id, 
+                s.email, 
+                s.amountRange, 
+                s.createdAt ? new Date(s.createdAt.seconds * 1000).toLocaleString() : '',
+                s.ip
+            ]);
+            
+            let csvContent = "data:text/csv;charset=utf-8," 
+                + headers.join(",") + "\n" 
+                + rows.map(e => e.join(",")).join("\n");
+                
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "submissions.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- UI HELPERS ---
+        function setLoading(isLoading, btnId) {
+            const btn = document.getElementById(btnId);
+            if(!btn) return;
+            if(isLoading) {
+                btn.disabled = true;
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = `<div class="loader mx-auto"></div>`;
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = btn.dataset.originalText || 'Submit';
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            const color = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            toast.className = `fixed bottom-5 right-5 ${color} text-white px-6 py-3 rounded-lg shadow-xl transform transition-all duration-300 translate-y-10 opacity-0 flex items-center gap-2 z-50`;
+            toast.innerHTML = `<span>${message}</span>`;
+            els.toastContainer.appendChild(toast);
+            
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-10');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function toggleDarkMode() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('color-theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('color-theme', 'dark');
+            }
+        }
+
+        // --- RENDERERS ---
+
+        function render() {
+            const isAdmin = state.user && state.user.email === CONFIG.adminEmail;
+
+            // Header
+            const headerHtml = `
+                <nav class="w-full glass-dark sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex items-center justify-between h-16">
+                            <div class="flex items-center gap-2">
+                                ${state.settings.logoUrl ? `<img src="${state.settings.logoUrl}" class="h-8 w-auto" alt="Logo">` : ''}
+                                <span class="font-bold text-xl tracking-tight text-accent">${state.settings.siteName}</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <button onclick="window.toggleDarkMode()" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+                                    <i data-lucide="moon" class="w-5 h-5"></i>
+                                </button>
+                                ${isAdmin ? `
+                                    <button onclick="window.location.reload()" class="text-sm font-medium hover:text-accent">Dashboard</button>
+                                    <button onclick="window.logout()" class="text-sm font-medium text-red-500 hover:text-red-400">Logout</button>
+                                ` : `
+                                    <button onclick="window.showLoginModal()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Admin</button>
+                                `}
+                            </div>
                         </div>
                     </div>
-                    
-                    <h1 id="postTitle" class="text-3xl md:text-4xl font-bold mt-2 mb-4 text-gray-900 dark:text-white"></h1>
-                    <p id="postHook" class="text-lg text-gray-600 dark:text-gray-300 italic mb-8 border-l-4 border-brand-500 pl-4"></p>
+                </nav>
+            `;
 
-                    <!-- The Verse -->
-                    <div class="bg-brand-50 dark:bg-gray-900/50 p-6 rounded-xl mb-8 border border-brand-100 dark:border-gray-700">
-                        <p id="postVerse" class="font-serif text-xl leading-relaxed text-brand-900 dark:text-brand-100"></p>
+            let mainHtml = '';
+
+            if (isAdmin) {
+                // Admin View
+                mainHtml = `
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        
+                        <!-- Tabs -->
+                        <div class="flex border-b border-slate-200 dark:border-slate-700 mb-6">
+                            <button id="tab-subs" class="px-4 py-2 border-b-2 border-accent font-medium text-accent">Submissions</button>
+                            <button id="tab-settings" class="px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onclick="window.switchTab('settings')">Settings</button>
+                        </div>
+
+                        <!-- Submissions Panel -->
+                        <div id="panel-subs">
+                            <div class="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+                                <div class="text-lg font-bold">Total: <span id="total-count">...</span></div>
+                                <div class="flex gap-2 w-full md:w-auto">
+                                    <input type="text" placeholder="Search email..." class="px-3 py-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none" oninput="state.searchQuery = this.value; window.fetchSubmissions()">
+                                    <select onchange="state.filterAmount = this.value; window.fetchSubmissions()" class="px-3 py-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none">
+                                        <option value="all">All Amounts</option>
+                                        <option value="$100 - $1,000">$100 - $1,000</option>
+                                        <option value="$1,000 - $5,000">$1,000 - $5,000</option>
+                                        <option value="$5,000+">$5,000+</option>
+                                    </select>
+                                    <button onclick="window.exportCSV()" class="p-2 bg-slate-200 dark:bg-slate-700 rounded hover:opacity-80"><i data-lucide="download" class="w-5 h-5"></i></button>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white dark:bg-slate-800 rounded-lg shadow overflow-hidden border border-slate-200 dark:border-slate-700">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left text-sm">
+                                        <thead class="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 uppercase font-medium">
+                                            <tr>
+                                                <th class="px-6 py-3">Date</th>
+                                                <th class="px-6 py-3">Email</th>
+                                                <th class="px-6 py-3">Amount</th>
+                                                <th class="px-6 py-3">IP</th>
+                                                <th class="px-6 py-3 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="subs-table-body" class="divide-y divide-slate-200 dark:divide-slate-700">
+                                            <!-- Rows injected here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-center">
+                                <button id="load-more-btn" onclick="window.fetchSubmissions(false)" class="text-sm text-accent hover:underline">Load More</button>
+                            </div>
+                        </div>
+
+                        <!-- Settings Panel (Hidden by default) -->
+                        <div id="panel-settings" class="hidden max-w-2xl mx-auto">
+                            <form id="settings-form" onsubmit="window.saveSettings(event)" class="space-y-6 bg-white dark:bg-slate-800 p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+                                <h2 class="text-xl font-bold mb-4">Branding Settings</h2>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Site Name</label>
+                                    <input type="text" name="siteName" value="${state.settings.siteName}" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:border-accent outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Tagline</label>
+                                    <input type="text" name="tagline" value="${state.settings.tagline}" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:border-accent outline-none">
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1">Primary CTA Text</label>
+                                        <input type="text" name="primaryCtaText" value="${state.settings.primaryCtaText}" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:border-accent outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1">Accent Color</label>
+                                        <input type="color" name="accentColor" value="${state.settings.accentColor}" class="w-full h-10 p-1 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600">
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Logo (Upload to replace)</label>
+                                    <div class="flex items-center gap-4">
+                                        ${state.settings.logoUrl ? `<img src="${state.settings.logoUrl}" class="h-10 w-10 object-contain bg-slate-200 rounded">` : ''}
+                                        <input type="file" id="logo-upload" accept="image/*" class="text-sm">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Hero Background (Upload to replace)</label>
+                                    <div class="flex items-center gap-4">
+                                        ${state.settings.heroBackgroundUrl ? `<img src="${state.settings.heroBackgroundUrl}" class="h-10 w-20 object-cover bg-slate-200 rounded">` : ''}
+                                        <input type="file" id="hero-upload" accept="image/*" class="text-sm">
+                                    </div>
+                                </div>
+
+                                <button id="save-settings-btn" type="submit" class="w-full bg-accent hover-bg-accent text-white py-2 rounded font-bold transition">Save Changes</button>
+                            </form>
+                        </div>
                     </div>
+                `;
+            } else {
+                // Public View
+                const bgStyle = state.settings.heroBackgroundUrl 
+                    ? `background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.9)), url('${state.settings.heroBackgroundUrl}'); background-size: cover; background-position: center;`
+                    : '';
+                
+                mainHtml = `
+                    <div class="flex-grow flex items-center justify-center p-4 relative overflow-hidden" style="${bgStyle}">
+                        <!-- Background Blobs -->
+                        <div class="absolute top-0 left-0 w-72 h-72 bg-accent opacity-20 blur-3xl rounded-full mix-blend-multiply filter animate-blob"></div>
+                        <div class="absolute top-0 right-0 w-72 h-72 bg-purple-500 opacity-20 blur-3xl rounded-full mix-blend-multiply filter animate-blob animation-delay-2000"></div>
 
-                    <!-- Content -->
-                    <div class="prose dark:prose-invert max-w-none">
-                        <h3 class="text-xl font-bold mb-2">Understanding This</h3>
-                        <div id="postExplanation" class="mb-8 whitespace-pre-wrap"></div>
+                        <div class="relative w-full max-w-md bg-white/10 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+                            <div class="p-8">
+                                <div class="text-center mb-8">
+                                    <h1 class="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">${state.settings.siteName}</h1>
+                                    <p class="text-slate-600 dark:text-slate-300">${state.settings.tagline}</p>
+                                </div>
 
-                        <h3 class="text-xl font-bold mb-2">Practical Steps</h3>
-                        <div id="postSteps" class="mb-8 whitespace-pre-wrap"></div>
+                                <form id="public-form" onsubmit="window.submitForm(event)" class="space-y-5">
+                                    <div>
+                                        <label for="public-email" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+                                        <input type="email" id="public-email" required class="w-full px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all" placeholder="you@example.com">
+                                    </div>
 
-                        <h3 class="text-xl font-bold mb-2">A Short Prayer</h3>
-                        <div id="postPrayer" class="italic mb-8 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg whitespace-pre-wrap"></div>
+                                    <div>
+                                        <label for="public-amount" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Intended Contribution</label>
+                                        <select id="public-amount" required class="w-full px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none appearance-none">
+                                            <option value="" disabled selected>Select an amount range</option>
+                                            <option value="$100 - $1,000">$100 - $1,000</option>
+                                            <option value="$1,000 - $5,000">$1,000 - $5,000</option>
+                                            <option value="$5,000+">$5,000+</option>
+                                        </select>
+                                    </div>
+
+                                    <button id="submit-btn" type="submit" class="w-full bg-accent hover-bg-accent text-white font-bold py-3 px-4 rounded-lg shadow-lg transform transition hover:scale-[1.02] focus:ring-2 focus:ring-offset-2 focus:ring-accent">
+                                        ${state.settings.primaryCtaText}
+                                    </button>
+                                </form>
+                                <p class="text-center text-xs text-slate-500 mt-6">Secure registration. No spam.</p>
+                            </div>
+                        </div>
                     </div>
+                `;
+            }
 
-                    <!-- Video -->
-                    <div id="postVideo" class="mt-8 aspect-video rounded-xl overflow-hidden bg-black hidden"></div>
-                </div>
-            </article>
-        </div>
-
-        <!-- === VIEW: BOOKMARKS === -->
-        <div id="view-bookmarks" class="view-section hide">
-             <h2 class="text-2xl font-bold mb-6">Your Saved Items</h2>
-             <div id="bookmarksGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-             <p id="noBookmarks" class="text-gray-500 hidden">No bookmarks yet.</p>
-        </div>
-
-        <!-- === VIEW: ADMIN === -->
-        <div id="view-admin" class="view-section hide">
-            <!-- Login -->
-            <div id="adminLogin" class="max-w-md mx-auto mt-20 p-8 bg-white dark:bg-gray-800 rounded-xl shadow-2xl">
-                <h2 class="text-2xl font-bold mb-4">Admin Access</h2>
-                <p class="mb-4 text-sm text-gray-500">Restricted to bristyxom@gmail.com</p>
-                <input type="email" id="adminEmail" placeholder="Email" class="w-full p-3 mb-3 border rounded dark:bg-gray-700">
-                <input type="password" id="adminPass" placeholder="Password" class="w-full p-3 mb-4 border rounded dark:bg-gray-700">
-                <button onclick="handleLogin()" class="w-full bg-brand-600 text-white p-3 rounded font-bold hover:bg-brand-700">Login</button>
-                <p id="loginError" class="text-red-500 text-sm mt-3"></p>
-            </div>
-
-            <!-- Dashboard -->
-            <div id="adminDashboard" class="hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h1 class="text-3xl font-bold">Dashboard</h1>
-                    <button onclick="handleLogout()" class="text-red-500 text-sm">Logout</button>
-                </div>
-
-                <!-- Tabs -->
-                <div class="flex space-x-4 border-b border-gray-200 dark:border-gray-700 mb-6">
-                    <button onclick="switchAdminTab('posts')" class="pb-2 border-b-2 border-brand-500 font-bold">Posts</button>
-                    <button onclick="switchAdminTab('settings')" class="pb-2 text-gray-500">Settings</button>
-                </div>
-
-                <!-- Posts Manager -->
-                <div id="admin-tab-posts">
-                    <button onclick="openPostModal()" class="mb-4 bg-brand-600 text-white px-4 py-2 rounded shadow hover:bg-brand-700">+ New Post</button>
-                    <div id="adminPostList" class="space-y-2"></div>
-                </div>
-
-                <!-- Settings Manager -->
-                <div id="admin-tab-settings" class="hidden">
-                    <label class="block mb-2 font-bold">Daily Message</label>
-                    <textarea id="settingDailyMsg" class="w-full p-3 border rounded dark:bg-gray-800" rows="3"></textarea>
-                    <button onclick="saveSettings()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded">Save Settings</button>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Admin Post Modal -->
-    <div id="postModal" class="fixed inset-0 bg-black/80 z-50 hidden flex justify-center items-start overflow-y-auto py-10">
-        <div class="bg-white dark:bg-gray-800 w-full max-w-4xl p-6 rounded-xl shadow-2xl relative">
-            <button onclick="closePostModal()" class="absolute top-4 right-4 text-2xl">&times;</button>
-            <h2 class="text-xl font-bold mb-4" id="modalTitle">Edit Post</h2>
+            els.app.innerHTML = headerHtml + mainHtml;
+            lucide.createIcons();
             
-            <form id="postForm" onsubmit="handleSavePost(event)" class="space-y-4">
-                <input type="hidden" id="editPostId">
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="text" id="inpTitle" placeholder="Title" required class="p-2 border rounded w-full dark:bg-gray-700">
-                    <input type="text" id="inpHook" placeholder="Short Hook" class="p-2 border rounded w-full dark:bg-gray-700">
-                </div>
-                
-                <!-- Image Upload -->
-                <div class="border p-4 rounded border-dashed border-gray-400">
-                    <label class="block text-sm font-bold mb-2">Cover Image</label>
-                    <input type="file" id="inpImageFile" accept="image/*">
-                    <input type="hidden" id="inpImageUrl">
-                    <p id="uploadStatus" class="text-sm text-brand-500 mt-1"></p>
-                    <img id="imgPreview" class="mt-2 h-32 hidden object-cover rounded">
-                </div>
+            if (isAdmin) {
+                fetchSubmissions();
+            }
+        }
 
-                <textarea id="inpVerse" placeholder="Bible Verse" class="w-full p-2 border rounded dark:bg-gray-700" rows="2"></textarea>
-                
-                <div class="grid grid-cols-2 gap-4">
-                    <textarea id="inpExplanation" placeholder="Explanation (Markdown-ish)" class="w-full p-2 border rounded dark:bg-gray-700" rows="4"></textarea>
-                    <textarea id="inpSteps" placeholder="Practical Steps" class="w-full p-2 border rounded dark:bg-gray-700" rows="4"></textarea>
-                </div>
-                
-                <textarea id="inpPrayer" placeholder="Short Prayer" class="w-full p-2 border rounded dark:bg-gray-700" rows="2"></textarea>
-                
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="text" id="inpYoutube" placeholder="YouTube Video ID (e.g. dQw4w9WgXcQ)" class="p-2 border rounded w-full dark:bg-gray-700">
-                    <select id="inpCategory" class="p-2 border rounded w-full dark:bg-gray-700"></select>
-                </div>
+        // --- ADMIN HELPERS ---
+        window.switchTab = (tab) => {
+            document.getElementById('panel-subs').classList.add('hidden');
+            document.getElementById('panel-settings').classList.add('hidden');
+            document.getElementById('panel-' + tab).classList.remove('hidden');
+            
+            document.getElementById('tab-subs').className = tab === 'subs' ? 'px-4 py-2 border-b-2 border-accent font-medium text-accent' : 'px-4 py-2 text-slate-500';
+            document.getElementById('tab-settings').className = tab === 'settings' ? 'px-4 py-2 border-b-2 border-accent font-medium text-accent' : 'px-4 py-2 text-slate-500';
+        };
 
-                <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="inpPublished" class="w-5 h-5">
-                    <label>Published (Visible to public)</label>
-                </div>
+        function renderAdminDashboard() {
+            const tbody = document.getElementById('subs-table-body');
+            document.getElementById('total-count').innerText = state.submissions.length + "+";
+            
+            if (state.submissions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-500">No submissions found.</td></tr>`;
+                return;
+            }
 
-                <button type="submit" class="w-full bg-brand-600 text-white p-3 rounded font-bold hover:bg-brand-700">Save Post</button>
-            </form>
+            tbody.innerHTML = state.submissions.map(sub => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
+                    <td class="px-6 py-4 whitespace-nowrap text-slate-500 dark:text-slate-400">${sub.createdAt ? new Date(sub.createdAt.seconds * 1000).toLocaleDateString() : 'Pending'}</td>
+                    <td class="px-6 py-4 font-medium text-slate-900 dark:text-white">${sub.email}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                            ${sub.amountRange}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs font-mono">${sub.ip}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="window.deleteSubmission('${sub.id}')" class="text-red-600 hover:text-red-900 dark:hover:text-red-400">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // --- GLOBAL EXPORTS ---
+        window.toggleDarkMode = toggleDarkMode;
+        window.submitForm = submitForm;
+        window.loginAdmin = loginAdmin;
+        window.logout = logout;
+        window.showLoginModal = () => {
+            const modal = document.createElement('div');
+            modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm";
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 p-8 rounded-lg shadow-2xl w-full max-w-sm relative">
+                    <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i data-lucide="x"></i></button>
+                    <h2 class="text-2xl font-bold mb-6 text-center">Admin Access</h2>
+                    <form onsubmit="window.loginAdmin(event); this.closest('.fixed').remove()">
+                        <div class="space-y-4">
+                            <input type="email" id="admin-email" placeholder="Admin Email" class="w-full p-3 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 outline-none focus:border-accent">
+                            <input type="password" id="admin-pass" placeholder="Password" class="w-full p-3 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 outline-none focus:border-accent">
+                            <button id="login-btn" type="submit" class="w-full bg-accent text-white py-3 rounded font-bold hover:brightness-90">Login</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            lucide.createIcons();
+        };
+        window.fetchSubmissions = fetchSubmissions;
+        window.saveSettings = saveSettings;
+        window.deleteSubmission = deleteSubmission;
+        window.uploadToImageKit = uploadToImageKit;
+        window.exportCSV = exportCSV;
+
+        // Run
+        init();
+    </script>
+
+    <!-- App Container -->
+    <div id="app" class="flex flex-col min-h-screen">
+        <!-- Loader during init -->
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="loader text-accent"></div>
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <!-- Toasts -->
+    <div id="toast-container"></div>
 
-        // --- CONFIGURATION (REPLACE THESE) ---
-        const firebaseConfig = {
-            apiKey: "YOUR_FIREBASE_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        const ADMIN_EMAIL = "bristyxom@gmail.com";
-        const IMAGEKIT_ENDPOINT = "https://ik.imagekit.io/YOUR_IMAGEKIT_ID"; 
-
-        // --- INIT ---
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        let currentUser = null;
-        
-        // --- GLOBAL STATE ---
-        let state = {
-            posts: [],
-            categories: [],
-            moods: [],
-            settings: {}
-        };
-
-        // --- IMAGEKIT SETUP ---
-        const imagekit = new ImageKit({
-            publicKey: "YOUR_IMAGEKIT_PUBLIC_KEY", // It's safe to expose public key
-            urlEndpoint: IMAGEKIT_ENDPOINT,
-            authenticationEndpoint: "/api/imagekit-auth"
-        });
-
-        // --- ROUTING ---
-        function handleRoute() {
-            const hash = window.location.hash || '#home';
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hide'));
-            
-            if (hash === '#home') {
-                document.getElementById('view-home').classList.remove('hide');
-                renderHome();
-            } else if (hash.startsWith('#post/')) {
-                const id = hash.split('/')[1];
-                document.getElementById('view-post').classList.remove('hide');
-                renderPost(id);
-            } else if (hash === '#bookmarks') {
-                document.getElementById('view-bookmarks').classList.remove('hide');
-                renderBookmarks();
-            } else if (hash === '#admin') {
-                document.getElementById('view-admin').classList.remove('hide');
-                checkAdminUI();
-            }
-            window.scrollTo(0,0);
-        }
-
-        window.addEventListener('hashchange', handleRoute);
-
-        // --- DATA LISTENERS ---
-        // 1. Settings
-        onSnapshot(doc(db, "settings", "main"), (doc) => {
-            if(doc.exists()) {
-                state.settings = doc.data();
-                if(state.settings.dailyMessage) {
-                    document.getElementById('dailyText').innerText = state.settings.dailyMessage;
-                    document.getElementById('dailyMessage').classList.remove('hidden');
-                    document.getElementById('settingDailyMsg').value = state.settings.dailyMessage;
-                }
-            }
-        });
-
-        // 2. Categories & Moods (Static for MVP, assume they exist)
-        // Hardcoding standard ones if DB is empty for demo, but better to fetch
-        const defaultCats = [
-            {id: 'mental', name: 'Mental Health', icon: 'fa-brain'},
-            {id: 'relationships', name: 'Relationships', icon: 'fa-heart'},
-            {id: 'money', name: 'Money & Career', icon: 'fa-coins'}
-        ];
-        const defaultMoods = [
-            {name: 'Anxious', color: 'bg-yellow-100'}, 
-            {name: 'Lonely', color: 'bg-blue-100'}, 
-            {name: 'Heartbroken', color: 'bg-red-100'},
-            {name: 'Burnout', color: 'bg-gray-200'}
-        ];
-
-        // 3. Posts
-        onSnapshot(collection(db, "posts"), (snapshot) => {
-            state.posts = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-            renderHome(); // Re-render feed
-            if(currentUser) renderAdminPostList();
-        });
-
-        // --- RENDERING ---
-        function renderHome() {
-            // Categories
-            const catContainer = document.getElementById('categoryGrid');
-            catContainer.innerHTML = defaultCats.map(c => `
-                <div onclick="filterFeed('category', '${c.id}')" class="card-3d bg-white dark:bg-gray-800 p-6 rounded-xl shadow cursor-pointer border-l-4 border-brand-500 hover:bg-brand-50 dark:hover:bg-gray-700">
-                    <i class="fas ${c.icon} text-3xl text-brand-500 mb-3"></i>
-                    <h3 class="font-bold text-lg">${c.name}</h3>
-                </div>
-            `).join('');
-
-            // Moods
-            const moodContainer = document.getElementById('moodGrid');
-            moodContainer.innerHTML = defaultMoods.map(m => `
-                <button onclick="filterFeed('search', '${m.name}')" class="px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700 hover:bg-brand-500 hover:text-white transition-colors text-sm font-semibold">
-                    ${m.name}
-                </button>
-            `).join('');
-
-            // Feed (Default: Show all published)
-            renderFeed(state.posts.filter(p => p.published));
-        }
-
-        window.filterFeed = (type, value) => {
-            let filtered = state.posts.filter(p => p.published);
-            if(type === 'category') {
-                filtered = filtered.filter(p => p.category === value);
-                document.getElementById('feedTitle').innerText = value === 'mental' ? 'Mental Health' : value === 'relationships' ? 'Relationships' : 'Money & Career';
-            } else if (type === 'search') {
-                const term = value.toLowerCase();
-                filtered = filtered.filter(p => 
-                    p.title.toLowerCase().includes(term) || 
-                    (p.hook && p.hook.toLowerCase().includes(term))
-                );
-                document.getElementById('feedTitle').innerText = `Results for "${value}"`;
-            }
-            renderFeed(filtered);
-            document.getElementById('postsGrid').scrollIntoView({behavior: 'smooth'});
-        }
-
-        // Search Input
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            if(e.target.value.length > 2) filterFeed('search', e.target.value);
-        });
-
-        function renderFeed(posts) {
-            const grid = document.getElementById('postsGrid');
-            if(posts.length === 0) {
-                grid.innerHTML = '<p class="col-span-3 text-center text-gray-500 py-10">No posts found.</p>';
-                return;
-            }
-            grid.innerHTML = posts.map(post => `
-                <div class="card-3d bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col h-full cursor-pointer group" onclick="location.hash='#post/${post.id}'">
-                    <div class="h-48 bg-cover bg-center transition-transform duration-500 group-hover:scale-105" style="background-image: url('${post.imageUrl || 'https://via.placeholder.com/400'}')"></div>
-                    <div class="p-5 flex-grow flex flex-col">
-                        <span class="text-xs font-bold text-brand-500 uppercase mb-2">${post.category || 'General'}</span>
-                        <h3 class="text-xl font-bold mb-2 leading-tight">${post.title}</h3>
-                        <p class="text-gray-600 dark:text-gray-400 text-sm line-clamp-3 mb-4 flex-grow">${post.hook || ''}</p>
-                        <div class="flex items-center text-brand-600 font-semibold text-sm">
-                            Read More <i class="fas fa-arrow-right ml-2 text-xs"></i>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function renderPost(id) {
-            const post = state.posts.find(p => p.id === id);
-            if(!post) return;
-
-            document.getElementById('postTitle').innerText = post.title;
-            document.getElementById('postHook').innerText = post.hook;
-            document.getElementById('postVerse').innerText = `"${post.verse}"`;
-            document.getElementById('postExplanation').innerText = post.explanation;
-            document.getElementById('postSteps').innerText = post.steps;
-            document.getElementById('postPrayer').innerText = post.prayer;
-            document.getElementById('postCategory').innerText = post.category || 'Guidance';
-            
-            if(post.imageUrl) {
-                document.getElementById('postImage').style.backgroundImage = `url('${post.imageUrl}')`;
-            }
-
-            const vidContainer = document.getElementById('postVideo');
-            if(post.youtubeId) {
-                vidContainer.classList.remove('hidden');
-                vidContainer.innerHTML = `<iframe class="w-full h-full" src="https://www.youtube.com/embed/${post.youtubeId}" frameborder="0" allowfullscreen></iframe>`;
-            } else {
-                vidContainer.classList.add('hidden');
-            }
-
-            // Bookmark Logic
-            const btnBookmark = document.getElementById('btnBookmark');
-            const bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-            const isSaved = bookmarks.includes(id);
-            btnBookmark.innerHTML = isSaved ? '<i class="fas fa-bookmark fa-lg text-brand-500"></i>' : '<i class="far fa-bookmark fa-lg"></i>';
-            
-            btnBookmark.onclick = (e) => {
-                e.stopPropagation();
-                let b = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-                if(b.includes(id)) b = b.filter(x => x !== id);
-                else b.push(id);
-                localStorage.setItem('bookmarks', JSON.stringify(b));
-                renderPost(id); // re-render icon
-            };
-
-            // Share Logic
-            document.getElementById('btnShare').onclick = () => {
-                const url = window.location.href;
-                navigator.clipboard.writeText(url).then(() => alert('Link copied!'));
-            };
-        }
-
-        function renderBookmarks() {
-            const ids = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-            const savedPosts = state.posts.filter(p => ids.includes(p.id));
-            const grid = document.getElementById('bookmarksGrid');
-            
-            if(savedPosts.length === 0) {
-                document.getElementById('noBookmarks').classList.remove('hidden');
-                grid.innerHTML = '';
-            } else {
-                document.getElementById('noBookmarks').classList.add('hidden');
-                grid.innerHTML = savedPosts.map(post => `
-                     <div class="bg-white dark:bg-gray-800 p-4 rounded shadow cursor-pointer" onclick="location.hash='#post/${post.id}'">
-                        <h4 class="font-bold">${post.title}</h4>
-                     </div>
-                `).join('');
-            }
-        }
-
-        // --- ADMIN LOGIC ---
-        
-        // UI Check
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user && user.email === ADMIN_EMAIL) {
-                document.getElementById('adminLink').classList.remove('hidden');
-                if(window.location.hash === '#admin') checkAdminUI();
-            } else {
-                document.getElementById('adminLink').classList.add('hidden');
-            }
-            handleRoute(); // Run initial route check
-        });
-
-        function checkAdminUI() {
-            if (currentUser && currentUser.email === ADMIN_EMAIL) {
-                document.getElementById('adminLogin').classList.add('hidden');
-                document.getElementById('adminDashboard').classList.remove('hidden');
-                renderAdminPostList();
-            } else {
-                document.getElementById('adminLogin').classList.remove('hidden');
-                document.getElementById('adminDashboard').classList.add('hidden');
-            }
-        }
-
-        window.handleLogin = async () => {
-            const email = document.getElementById('adminEmail').value;
-            const pass = document.getElementById('adminPass').value;
-            try {
-                await signInWithEmailAndPassword(auth, email, pass);
-                if(auth.currentUser.email !== ADMIN_EMAIL) {
-                    throw new Error("Unauthorized");
-                }
-                checkAdminUI();
-            } catch (e) {
-                document.getElementById('loginError').innerText = e.message;
-            }
-        };
-
-        window.handleLogout = () => signOut(auth).then(() => location.hash = '#home');
-
-        window.switchAdminTab = (tab) => {
-            document.getElementById('admin-tab-posts').classList.add('hidden');
-            document.getElementById('admin-tab-settings').classList.add('hidden');
-            document.getElementById(`admin-tab-${tab}`).classList.remove('hidden');
-        };
-
-        // Post CRUD
-        function renderAdminPostList() {
-            const list = document.getElementById('adminPostList');
-            list.innerHTML = state.posts.map(p => `
-                <div class="flex justify-between items-center bg-white dark:bg-gray-700 p-3 rounded shadow">
-                    <div>
-                        <span class="${p.published ? 'text-green-500' : 'text-red-500'} font-bold text-xs mr-2">●</span>
-                        <span class="font-bold">${p.title}</span>
-                    </div>
-                    <div>
-                        <button onclick="editPost('${p.id}')" class="text-blue-400 mr-2">Edit</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        window.openPostModal = () => {
-            document.getElementById('postForm').reset();
-            document.getElementById('editPostId').value = '';
-            document.getElementById('modalTitle').innerText = 'New Post';
-            document.getElementById('inpCategory').innerHTML = defaultCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            document.getElementById('postModal').classList.remove('hidden');
-        };
-
-        window.closePostModal = () => document.getElementById('postModal').classList.add('hidden');
-
-        window.editPost = (id) => {
-            openPostModal();
-            const p = state.posts.find(x => x.id === id);
-            document.getElementById('editPostId').value = p.id;
-            document.getElementById('modalTitle').innerText = 'Edit Post';
-            document.getElementById('inpTitle').value = p.title;
-            document.getElementById('inpHook').value = p.hook;
-            document.getElementById('inpVerse').value = p.verse;
-            document.getElementById('inpExplanation').value = p.explanation;
-            document.getElementById('inpSteps').value = p.steps;
-            document.getElementById('inpPrayer').value = p.prayer;
-            document.getElementById('inpYoutube').value = p.youtubeId || '';
-            document.getElementById('inpCategory').value = p.category;
-            document.getElementById('inpPublished').checked = p.published;
-            document.getElementById('inpImageUrl').value = p.imageUrl || '';
-            if(p.imageUrl) {
-                const img = document.getElementById('imgPreview');
-                img.src = p.imageUrl;
-                img.classList.remove('hidden');
-            }
-        };
-
-        // Image Upload Logic
-        document.getElementById('inpImageFile').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const status = document.getElementById('uploadStatus');
-            status.innerText = "Uploading...";
-            
-            try {
-                const result = await imagekit.upload({
-                    file: file,
-                    fileName: "post_cover_" + Date.now(),
-                    tags: ["post"]
-                });
-                
-                document.getElementById('inpImageUrl').value = result.url;
-                const img = document.getElementById('imgPreview');
-                img.src = result.url;
-                img.classList.remove('hidden');
-                status.innerText = "Upload Complete!";
-            } catch (err) {
-                console.error(err);
-                status.innerText = "Error uploading: " + err.message;
-            }
-        });
-
-        window.handleSavePost = async (e) => {
-            e.preventDefault();
-            const id = document.getElementById('editPostId').value;
-            const data = {
-                title: document.getElementById('inpTitle').value,
-                hook: document.getElementById('inpHook').value,
-                verse: document.getElementById('inpVerse').value,
-                explanation: document.getElementById('inpExplanation').value,
-                steps: document.getElementById('inpSteps').value,
-                prayer: document.getElementById('inpPrayer').value,
-                youtubeId: document.getElementById('inpYoutube').value,
-                category: document.getElementById('inpCategory').value,
-                published: document.getElementById('inpPublished').checked,
-                imageUrl: document.getElementById('inpImageUrl').value,
-                updatedAt: serverTimestamp()
-            };
-
-            if(id) {
-                await updateDoc(doc(db, "posts", id), data);
-            } else {
-                data.createdAt = serverTimestamp();
-                await addDoc(collection(db, "posts"), data);
-            }
-            closePostModal();
-        };
-
-        window.saveSettings = async () => {
-            const msg = document.getElementById('settingDailyMsg').value;
-            await setDoc(doc(db, "settings", "main"), { dailyMessage: msg }, { merge: true });
-            alert('Settings Saved');
-        };
-
-        // Dark Mode
-        document.getElementById('themeToggle').addEventListener('click', () => {
-            document.documentElement.classList.toggle('dark');
-        });
-
-    </script>
 </body>
 </html>
