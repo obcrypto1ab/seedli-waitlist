@@ -75,16 +75,18 @@
         // --- STATE MANAGEMENT ---
         const state = {
             user: null,
+            view: 'public', // 'public' | 'admin'
+            activeTab: 'subs', // 'subs' | 'settings'
             settings: {
                 siteName: "Presale Launch",
                 tagline: "Join the future of finance.",
                 primaryCtaText: "Join Waitlist",
                 logoUrl: "",
-                heroBackgroundUrl: "", // Optional
-                accentColor: "#3b82f6" // Default Blue
+                heroBackgroundUrl: "", 
+                accentColor: "#3b82f6" 
             },
             submissions: [],
-            lastDoc: null, // For pagination
+            lastDoc: null,
             loading: false,
             filterAmount: 'all',
             searchQuery: ''
@@ -96,8 +98,6 @@
         const db = getFirestore(app);
 
         // --- IMAGEKIT INIT ---
-        // Note: Removed authenticationEndpoint to prevent automatic (and failing) internal fetch.
-        // We will pass auth parameters manually in uploadToImageKit().
         const imagekit = new ImageKit({
             publicKey: CONFIG.imagekitPublicKey,
             urlEndpoint: CONFIG.imagekitUrlEndpoint
@@ -106,8 +106,7 @@
         // --- DOM ELEMENTS ---
         const els = {
             app: document.getElementById('app'),
-            toastContainer: document.getElementById('toast-container'),
-            darkModeToggle: document.getElementById('dark-mode-toggle')
+            toastContainer: document.getElementById('toast-container')
         };
 
         // --- INITIALIZATION ---
@@ -120,9 +119,25 @@
             // Load Settings
             await loadSettings();
             
+            // Check Hash for Admin Login
+            const checkAdminHash = () => {
+                if (window.location.hash === '#admin' && !state.user) {
+                    window.showLoginModal();
+                }
+            };
+            window.addEventListener('hashchange', checkAdminHash);
+            checkAdminHash();
+
             // Auth Listener
             onAuthStateChanged(auth, (user) => {
                 state.user = user;
+                // If user logs in as admin, default to admin view. If logout, public view.
+                if (user && user.email === CONFIG.adminEmail) {
+                    state.view = 'admin';
+                    state.activeTab = 'subs';
+                } else {
+                    state.view = 'public';
+                }
                 render();
             });
         }
@@ -137,13 +152,12 @@
                     applyBranding();
                 }
             } catch (e) {
-                console.warn("Settings not found or permission denied (first run). using defaults.");
+                console.warn("Settings load warning:", e);
             }
         }
 
         function applyBranding() {
             document.title = state.settings.siteName;
-            // Inject custom accent color dynamically
             const style = document.createElement('style');
             style.innerHTML = `
                 .bg-accent { background-color: ${state.settings.accentColor} !important; }
@@ -154,17 +168,27 @@
             document.head.appendChild(style);
         }
 
+        // --- FORM HANDLER (ISSUE #1) ---
         async function submitForm(e) {
-            e.preventDefault();
-            const email = document.getElementById('public-email').value;
-            const amount = document.getElementById('public-amount').value;
+            e.preventDefault(); // Stop reload immediately
+            
+            const emailInput = document.getElementById('public-email');
+            const amountInput = document.getElementById('public-amount');
+            
+            if(!emailInput || !amountInput) {
+                 showToast("Form error: inputs not found.", "error");
+                 return;
+            }
+
+            const email = emailInput.value;
+            const amount = amountInput.value;
 
             if(!email || !amount) return showToast("Please fill all fields", "error");
 
             setLoading(true, "submit-btn");
 
             try {
-                // Get IP (simple fetch, optional)
+                // Get IP (optional, fail silently)
                 let ipData = {}; 
                 try { const res = await fetch('https://api.ipify.org?format=json'); ipData = await res.json(); } catch(e){}
 
@@ -179,8 +203,12 @@
                 document.getElementById('public-form').reset();
                 showToast("Successfully registered!", "success");
             } catch (error) {
-                console.error(error);
-                showToast("Submission failed. Try again.", "error");
+                console.error("Submission Error Full Details:", error);
+                if (error.code === 'permission-denied') {
+                    showToast("Error: Database permission denied. Check Firestore rules.", "error");
+                } else {
+                    showToast("Submission failed: " + error.message, "error");
+                }
             } finally {
                 setLoading(false, "submit-btn");
             }
@@ -196,6 +224,7 @@
             try {
                 await signInWithEmailAndPassword(auth, email, pass);
                 showToast("Welcome back, Admin", "success");
+                // onAuthStateChanged handles state.view update
             } catch (error) {
                 showToast("Login failed: " + error.message, "error");
             } finally {
@@ -205,7 +234,11 @@
 
         async function logout() {
             await signOut(auth);
-            window.location.reload();
+            state.user = null;
+            state.submissions = [];
+            state.view = 'public';
+            window.location.hash = ''; 
+            render();
         }
 
         async function fetchSubmissions(reset = true) {
@@ -236,7 +269,6 @@
                 
                 let newSubs = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
 
-                // Client side search (Firestore doesn't support partial text search natively easily)
                 if(state.searchQuery) {
                     newSubs = newSubs.filter(s => s.email.toLowerCase().includes(state.searchQuery.toLowerCase()));
                 }
@@ -244,6 +276,7 @@
                 state.submissions = [...state.submissions, ...newSubs];
                 renderAdminDashboard();
             } catch (error) {
+                console.error(error);
                 showToast("Error loading data: " + error.message, "error");
             } finally {
                 setLoading(false, "load-more-btn");
@@ -272,19 +305,17 @@
                 tagline: formData.get('tagline'),
                 primaryCtaText: formData.get('primaryCtaText'),
                 accentColor: formData.get('accentColor'),
-                logoUrl: state.settings.logoUrl, // Preserved unless uploaded
+                logoUrl: state.settings.logoUrl,
                 heroBackgroundUrl: state.settings.heroBackgroundUrl
             };
 
             try {
-                // Upload Logo if present
                 const logoFile = document.getElementById('logo-upload').files[0];
                 if(logoFile) {
                    const res = await uploadToImageKit(logoFile);
                    updates.logoUrl = res.url;
                 }
 
-                // Upload Hero if present
                 const heroFile = document.getElementById('hero-upload').files[0];
                 if(heroFile) {
                    const res = await uploadToImageKit(heroFile);
@@ -303,31 +334,17 @@
             }
         }
 
-        /**
-         * UPDATED: Manual Auth + Upload Flow
-         * 1. Fetches auth parameters from API
-         * 2. Converts file to Base64
-         * 3. Uploads with explicit signature/token
-         */
         async function uploadToImageKit(file) {
             try {
-                // Step 1: Manual Auth Fetch
                 const authUrl = `${window.location.origin}/api/imagekit-auth`;
-                console.log("Fetching ImageKit auth from:", authUrl);
-                
                 const authRes = await fetch(authUrl);
-                if (!authRes.ok) {
-                    throw new Error(`Auth fetch failed: ${authRes.statusText}`);
-                }
-                
+                if (!authRes.ok) throw new Error(`Auth fetch failed: ${authRes.statusText}`);
                 const authData = await authRes.json();
-                console.log("Auth received:", authData);
 
                 if (!authData.token || !authData.signature || !authData.expire) {
-                    throw new Error("Invalid auth response structure from server.");
+                    throw new Error("Invalid auth response structure.");
                 }
 
-                // Step 2: Convert File to Base64
                 const base64 = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result);
@@ -335,30 +352,21 @@
                     reader.readAsDataURL(file);
                 });
 
-                // Step 3: Upload with Explicit Parameters
                 return new Promise((resolve, reject) => {
-                    imagekit.upload(
-                        {
-                            file: base64, // Base64 string
-                            fileName: file.name || "upload_" + Date.now(),
-                            token: authData.token,
-                            signature: authData.signature,
-                            expire: authData.expire,
-                            tags: ["site-assets"]
-                        },
-                        (err, result) => {
-                            if (err) {
-                                console.error("ImageKit SDK Upload Error:", err);
-                                reject(new Error(err.message || "Upload failed"));
-                            } else {
-                                console.log("Upload Success:", result);
-                                resolve(result);
-                            }
-                        }
-                    );
+                    imagekit.upload({
+                        file: base64,
+                        fileName: file.name || "upload_" + Date.now(),
+                        token: authData.token,
+                        signature: authData.signature,
+                        expire: authData.expire,
+                        tags: ["site-assets"]
+                    }, (err, result) => {
+                        if (err) reject(new Error(err.message || "Upload failed"));
+                        else resolve(result);
+                    });
                 });
             } catch (err) {
-                console.error("uploadToImageKit Wrapper Error:", err);
+                console.error("uploadToImageKit Error:", err);
                 throw err;
             }
         }
@@ -366,17 +374,11 @@
         function exportCSV() {
             const headers = ["ID", "Email", "Amount Range", "Created At", "IP"];
             const rows = state.submissions.map(s => [
-                s.id, 
-                s.email, 
-                s.amountRange, 
-                s.createdAt ? new Date(s.createdAt.seconds * 1000).toLocaleString() : '',
-                s.ip
+                s.id, s.email, s.amountRange, 
+                s.createdAt ? new Date(s.createdAt.seconds * 1000).toLocaleString() : '', s.ip
             ]);
             
-            let csvContent = "data:text/csv;charset=utf-8," 
-                + headers.join(",") + "\n" 
-                + rows.map(e => e.join(",")).join("\n");
-                
+            let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
@@ -406,11 +408,7 @@
             toast.className = `fixed bottom-5 right-5 ${color} text-white px-6 py-3 rounded-lg shadow-xl transform transition-all duration-300 translate-y-10 opacity-0 flex items-center gap-2 z-50`;
             toast.innerHTML = `<span>${message}</span>`;
             els.toastContainer.appendChild(toast);
-            
-            requestAnimationFrame(() => {
-                toast.classList.remove('translate-y-10', 'opacity-0');
-            });
-
+            requestAnimationFrame(() => toast.classList.remove('translate-y-10', 'opacity-0'));
             setTimeout(() => {
                 toast.classList.add('opacity-0', 'translate-y-10');
                 setTimeout(() => toast.remove(), 300);
@@ -427,9 +425,42 @@
             }
         }
 
-        // --- RENDERERS ---
+        // --- VIEW SWITCHING HELPERS (ISSUE #2 & #3) ---
+        window.switchTab = (tab) => {
+            state.activeTab = tab;
+            render(); 
+        };
+
+        window.switchView = (view) => {
+            state.view = view;
+            render();
+        };
+
+        // --- MAIN RENDER ---
         function render() {
             const isAdmin = state.user && state.user.email === CONFIG.adminEmail;
+            
+            // Determine if we are showing Admin Dashboard or Public Site
+            const showingDashboard = isAdmin && state.view === 'admin';
+
+            // Navbar Buttons Logic
+            let navButtons = '';
+            if (isAdmin) {
+                if (showingDashboard) {
+                    navButtons = `
+                        <button onclick="window.switchView('public')" class="text-sm font-medium hover:text-accent mr-4">View Site</button>
+                        <button onclick="window.logout()" class="text-sm font-medium text-red-500 hover:text-red-400">Logout</button>
+                    `;
+                } else {
+                    navButtons = `
+                        <button onclick="window.switchView('admin')" class="text-sm font-medium hover:text-accent mr-4">Dashboard</button>
+                        <button onclick="window.logout()" class="text-sm font-medium text-red-500 hover:text-red-400">Logout</button>
+                    `;
+                }
+            } else {
+                // Public user: no buttons (Admin login hidden)
+                navButtons = ``;
+            }
 
             // Header
             const headerHtml = `
@@ -444,12 +475,7 @@
                                 <button onclick="window.toggleDarkMode()" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition">
                                     <i data-lucide="moon" class="w-5 h-5"></i>
                                 </button>
-                                ${isAdmin ? `
-                                    <button onclick="window.location.reload()" class="text-sm font-medium hover:text-accent">Dashboard</button>
-                                    <button onclick="window.logout()" class="text-sm font-medium text-red-500 hover:text-red-400">Logout</button>
-                                ` : `
-                                    <button onclick="window.showLoginModal()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Admin</button>
-                                `}
+                                ${navButtons}
                             </div>
                         </div>
                     </div>
@@ -458,27 +484,33 @@
 
             let mainHtml = '';
 
-            if (isAdmin) {
+            if (showingDashboard) {
+                // Determine active classes based on State
+                const tabSubsClass = state.activeTab === 'subs' ? 'border-b-2 border-accent font-medium text-accent' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300';
+                const tabSettingsClass = state.activeTab === 'settings' ? 'border-b-2 border-accent font-medium text-accent' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300';
+                const panelSubsHidden = state.activeTab === 'subs' ? '' : 'hidden';
+                const panelSettingsHidden = state.activeTab === 'settings' ? '' : 'hidden';
+
                 // Admin View
                 mainHtml = `
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
                         <!-- Tabs -->
                         <div class="flex border-b border-slate-200 dark:border-slate-700 mb-6">
-                            <button id="tab-subs" class="px-4 py-2 border-b-2 border-accent font-medium text-accent">Submissions</button>
-                            <button id="tab-settings" class="px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onclick="window.switchTab('settings')">Settings</button>
+                            <button class="px-4 py-2 ${tabSubsClass}" onclick="window.switchTab('subs')">Submissions</button>
+                            <button class="px-4 py-2 ${tabSettingsClass}" onclick="window.switchTab('settings')">Settings</button>
                         </div>
 
                         <!-- Submissions Panel -->
-                        <div id="panel-subs">
+                        <div id="panel-subs" class="${panelSubsHidden}">
                             <div class="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
                                 <div class="text-lg font-bold">Total: <span id="total-count">...</span></div>
                                 <div class="flex gap-2 w-full md:w-auto">
-                                    <input type="text" placeholder="Search email..." class="px-3 py-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none" oninput="state.searchQuery = this.value; window.fetchSubmissions()">
+                                    <input type="text" value="${state.searchQuery}" placeholder="Search email..." class="px-3 py-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none" oninput="state.searchQuery = this.value; window.fetchSubmissions()">
                                     <select onchange="state.filterAmount = this.value; window.fetchSubmissions()" class="px-3 py-2 rounded bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-accent outline-none">
-                                        <option value="all">All Amounts</option>
-                                        <option value="$100 - $1,000">$100 - $1,000</option>
-                                        <option value="$1,000 - $5,000">$1,000 - $5,000</option>
-                                        <option value="$5,000+">$5,000+</option>
+                                        <option value="all" ${state.filterAmount === 'all' ? 'selected' : ''}>All Amounts</option>
+                                        <option value="$100 - $1,000" ${state.filterAmount === '$100 - $1,000' ? 'selected' : ''}>$100 - $1,000</option>
+                                        <option value="$1,000 - $5,000" ${state.filterAmount === '$1,000 - $5,000' ? 'selected' : ''}>$1,000 - $5,000</option>
+                                        <option value="$5,000+" ${state.filterAmount === '$5,000+' ? 'selected' : ''}>$5,000+</option>
                                     </select>
                                     <button onclick="window.exportCSV()" class="p-2 bg-slate-200 dark:bg-slate-700 rounded hover:opacity-80"><i data-lucide="download" class="w-5 h-5"></i></button>
                                 </div>
@@ -507,8 +539,8 @@
                             </div>
                         </div>
 
-                        <!-- Settings Panel (Hidden by default) -->
-                        <div id="panel-settings" class="hidden max-w-2xl mx-auto">
+                        <!-- Settings Panel -->
+                        <div id="panel-settings" class="${panelSettingsHidden} max-w-2xl mx-auto">
                             <form id="settings-form" onsubmit="window.saveSettings(event)" class="space-y-6 bg-white dark:bg-slate-800 p-6 rounded-lg border border-slate-200 dark:border-slate-700">
                                 <h2 class="text-xl font-bold mb-4">Branding Settings</h2>
                                 
@@ -560,7 +592,6 @@
                 
                 mainHtml = `
                     <div class="flex-grow flex items-center justify-center p-4 relative overflow-hidden" style="${bgStyle}">
-                        <!-- Background Blobs -->
                         <div class="absolute top-0 left-0 w-72 h-72 bg-accent opacity-20 blur-3xl rounded-full mix-blend-multiply filter animate-blob"></div>
                         <div class="absolute top-0 right-0 w-72 h-72 bg-purple-500 opacity-20 blur-3xl rounded-full mix-blend-multiply filter animate-blob animation-delay-2000"></div>
 
@@ -601,24 +632,21 @@
             els.app.innerHTML = headerHtml + mainHtml;
             lucide.createIcons();
             
-            if (isAdmin) {
-                fetchSubmissions();
+            if (showingDashboard && state.activeTab === 'subs') {
+                if (state.submissions.length === 0) {
+                   fetchSubmissions(false); 
+                } else {
+                   renderAdminDashboard();
+                }
             }
         }
 
-        // --- ADMIN HELPERS ---
-        window.switchTab = (tab) => {
-            document.getElementById('panel-subs').classList.add('hidden');
-            document.getElementById('panel-settings').classList.add('hidden');
-            document.getElementById('panel-' + tab).classList.remove('hidden');
-            
-            document.getElementById('tab-subs').className = tab === 'subs' ? 'px-4 py-2 border-b-2 border-accent font-medium text-accent' : 'px-4 py-2 text-slate-500';
-            document.getElementById('tab-settings').className = tab === 'settings' ? 'px-4 py-2 border-b-2 border-accent font-medium text-accent' : 'px-4 py-2 text-slate-500';
-        };
-
         function renderAdminDashboard() {
             const tbody = document.getElementById('subs-table-body');
-            document.getElementById('total-count').innerText = state.submissions.length + "+";
+            const totalCount = document.getElementById('total-count');
+            if(!tbody || !totalCount) return;
+
+            totalCount.innerText = state.submissions.length + "+";
             
             if (state.submissions.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-slate-500">No submissions found.</td></tr>`;
@@ -651,7 +679,9 @@
         window.loginAdmin = loginAdmin;
         window.logout = logout;
         window.showLoginModal = () => {
+            if(document.getElementById('admin-login-modal')) return;
             const modal = document.createElement('div');
+            modal.id = 'admin-login-modal';
             modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm";
             modal.innerHTML = `
                 <div class="bg-white dark:bg-slate-800 p-8 rounded-lg shadow-2xl w-full max-w-sm relative">
@@ -681,7 +711,6 @@
 
     <!-- App Container -->
     <div id="app" class="flex flex-col min-h-screen">
-        <!-- Loader during init -->
         <div class="flex items-center justify-center min-h-screen">
             <div class="loader text-accent"></div>
         </div>
