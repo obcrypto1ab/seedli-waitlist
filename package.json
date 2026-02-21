@@ -1,0 +1,7 @@
+{
+  "name": "presale-signup",
+  "version": "1.0.0",
+  "dependencies": {
+    "crypto": "latest" 
+  }
+}
